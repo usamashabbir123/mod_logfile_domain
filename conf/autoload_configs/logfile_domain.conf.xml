@@ -22,6 +22,8 @@
       Or via CLI: fs_cli -x "fsctl send_sighup"
     -->
     <param name="rotate-on-hup" value="true"/>
+     <!-- ENABLE DOMAIN-BASED LOGGING -->
+    <param name="domain-based-logging" value="true"/>
     
     <!-- 
       Default log level for all domain log files
