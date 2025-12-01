@@ -492,17 +492,6 @@ static switch_status_t mod_logfile_domain_logger(const switch_log_node_t *node, 
 	return SWITCH_STATUS_SUCCESS;
 }
 
-static void cleanup_profile(void *ptr)
-{
-	domain_logfile_profile_t *profile = (domain_logfile_profile_t *) ptr;
-
-	if (profile->log_afd) {
-		switch_file_close(profile->log_afd);
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "mod_logfile_domain: Closing %s\n", 
-		                profile->logfile ? profile->logfile : "unknown");
-	}
-}
-
 /* Event handler for channel events to manage cache */
 static void channel_event_handler(switch_event_t *event)
 {
@@ -664,14 +653,50 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_domain_load)
 
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_logfile_domain_shutdown)
 {
+	switch_hash_index_t *hi;
+	
 	switch_log_unbind_logger(mod_logfile_domain_logger);
 	switch_event_unbind(&globals.node);
 	switch_event_unbind(&globals.channel_create_node);
 	switch_event_unbind(&globals.channel_answer_node);
 	switch_event_unbind(&globals.channel_destroy_node);
 	
-	switch_core_hash_destroy(&domain_profile_hash);
-	switch_core_hash_destroy(&uuid_domain_cache);
+	/* Close all open log files */
+	if (domain_profile_hash) {
+		for (hi = switch_core_hash_first(domain_profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			void *val;
+			const void *key;
+			domain_logfile_profile_t *profile;
+			
+			switch_core_hash_this(hi, &key, NULL, &val);
+			profile = (domain_logfile_profile_t *)val;
+			
+			if (profile && profile->log_afd) {
+				switch_file_close(profile->log_afd);
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, 
+				                "mod_logfile_domain: Closing %s\n", 
+				                profile->logfile ? profile->logfile : "unknown");
+			}
+		}
+		switch_core_hash_destroy(&domain_profile_hash);
+	}
+	
+	/* Clean up UUID cache */
+	if (uuid_domain_cache) {
+		for (hi = switch_core_hash_first(uuid_domain_cache); hi; hi = switch_core_hash_next(&hi)) {
+			void *val;
+			const void *key;
+			char *domain;
+			
+			switch_core_hash_this(hi, &key, NULL, &val);
+			domain = (char *)val;
+			
+			if (domain) {
+				free(domain);
+			}
+		}
+		switch_core_hash_destroy(&uuid_domain_cache);
+	}
 	
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_logfile_domain shutdown complete\n");
 	
