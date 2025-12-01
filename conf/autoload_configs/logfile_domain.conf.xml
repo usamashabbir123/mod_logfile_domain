@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FreeSWITCH Domain-based Logger Configuration
+  
+  This configuration file controls the behavior of mod_logfile_domain,
+  which automatically creates separate log files for each domain/tenant.
+  
+  Log files are created at: /var/log/freeswitch/<domain>.log
+  
+  Example domain logs:
+    - /var/log/freeswitch/expertflow.log
+    - /var/log/freeswitch/company1.com.log
+    - /var/log/freeswitch/192.168.1.100.log
+-->
+
+<configuration name="logfile_domain.conf" description="Domain-based File Logging">
+  <settings>
+    
+    <!-- 
+      Rotate log files when receiving HUP signal
+      Send HUP: kill -HUP $(cat /var/run/freeswitch/freeswitch.pid)
+      Or via CLI: fs_cli -x "fsctl send_sighup"
+    -->
+    <param name="rotate-on-hup" value="true"/>
+    
+    <!-- 
+      Default log level for all domain log files
+      
+      Available levels:
+        - debug    : Detailed debugging information
+        - info     : Informational messages
+        - notice   : Normal but significant events
+        - warning  : Warning messages
+        - err      : Error conditions
+        - crit     : Critical conditions
+        - alert    : Action must be taken immediately
+      
+      Use comma-separated list for multiple levels
+      For production: info,notice,warning,err,crit,alert
+      For debugging: debug,info,notice,warning,err,crit,alert
+    -->
+    <param name="default-log-level" value="debug,info,notice,warning,err,crit,alert"/>
+    
+    <!-- 
+      Default rollover size in bytes
+      
+      When a log file reaches this size, it will be rotated
+      Examples:
+        - 10485760    = 10 MB
+        - 52428800    = 50 MB
+        - 104857600   = 100 MB (default)
+        - 209715200   = 200 MB
+        - 524288000   = 500 MB
+        - 1073741824  = 1 GB
+    -->
+    <param name="default-rollover" value="104857600"/>
+    
+    <!-- 
+      Maximum number of rotated log files to keep
+      
+      When rotating, old files are renamed:
+        domain.log -> domain.log.1
+        domain.log.1 -> domain.log.2
+        domain.log.2 -> domain.log.3
+        ...
+      
+      Files beyond this limit are deleted
+      Set to 0 for unlimited (uses timestamp-based rotation)
+      
+      Examples:
+        - 10   : Keep 10 rotated files (recommended for testing)
+        - 32   : Keep 32 rotated files (default)
+        - 100  : Keep 100 rotated files (high retention)
+    -->
+    <param name="default-maximum-rotate" value="32"/>
+    
+    <!-- 
+      Include UUID in log lines
+      
+      When enabled, each log line is prefixed with the channel UUID:
+        d3472fe9-910b-4f12-a089-dbd1f9453473 2025-12-02 00:33:46 [NOTICE] ...
+      
+      This helps track all logs for a specific call session
+      Recommended: true for production
+    -->
+    <param name="uuid" value="true"/>
+    
+  </settings>
+  
+  <!--
+    Advanced Configuration (Optional)
+    
+    You can add custom settings here if needed in future versions:
+    
+    <advanced>
+      <param name="cache-size" value="1000"/>
+      <param name="buffer-size" value="8192"/>
+    </advanced>
+  -->
+  
+</configuration>
+
+<!--
+  USAGE NOTES:
+  
+  1. Module Detection:
+     The module automatically detects domains from:
+     - Channel variable: domain_name
+     - SIP headers: sip_req_host, sip_to_host, sip_from_host
+     - Log data patterns: user@domain, sofia/profile/user@domain
+  
+  2. Log File Creation:
+     Domain log files are created automatically on first log entry
+     No pre-configuration needed for individual domains
+  
+  3. Performance:
+     - UUID-to-domain mappings are cached during session lifetime
+     - Cache is cleaned up when channel is destroyed
+     - Minimal performance impact on FreeSWITCH
+  
+  4. Compatibility:
+     - Works alongside standard mod_logfile
+     - mod_logfile writes to freeswitch.log (all logs)
+     - mod_logfile_domain writes to <domain>.log (domain-specific)
+  
+  5. Troubleshooting:
+     - Check FreeSWITCH logs: tail -f /var/log/freeswitch/freeswitch.log
+     - Verify module loaded: fs_cli -x "module_exists mod_logfile_domain"
+     - Check permissions: ls -la /var/log/freeswitch/
+     - Test domain detection: fs_cli -x "uuid_dump <uuid>" | grep domain
+  
+  6. Reload Configuration:
+     Changes to this file require module reload:
+       fs_cli -x "reload mod_logfile_domain"
+     Or FreeSWITCH restart:
+       systemctl restart freeswitch
+-->
