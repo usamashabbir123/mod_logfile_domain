@@ -34,8 +34,7 @@
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_logfile_shutdown);
-SWITCH_MODULE_DEFINITION(mod_logfile, mod_logfile_load, mod_logfile_shutdown, NULL);
-
+SWITCH_MODULE_DEFINITION(mod_logfile_domain, mod_logfile_domain_load, mod_logfile_domain_shutdown, NULL);
 #define DEFAULT_LIMIT    0xA00000       /* About 10 MB */
 #define WARM_FUZZY_OFFSET 256
 #define MAX_ROT 4096                    /* why not */
