@@ -53,6 +53,7 @@ static struct {
         switch_event_node_t *channel_create_node;
         switch_event_node_t *channel_answer_node;
         switch_event_node_t *channel_destroy_node;
+        switch_event_node_t *reload_xml_node;
         uint32_t default_log_level;
         switch_size_t default_roll_size;
         switch_size_t default_max_rot;
@@ -728,6 +729,58 @@ static void event_handler(switch_event_t *event)
         }
 }
 
+/* Reload XML configuration */
+static void reload_xml_event_handler(switch_event_t *event)
+{
+        char *cf = "logfile_domain.conf";
+        switch_xml_t cfg, xml, settings, param;
+
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_logfile_domain: Reloading configuration\n");
+
+        /* Load configuration */
+        if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, 
+                                "mod_logfile_domain: Open of %s failed during reload, keeping current settings\n", cf);
+                return;
+        }
+
+        if ((settings = switch_xml_child(cfg, "settings"))) {
+                for (param = switch_xml_child(settings, "param"); param; param = param->next) {
+                        char *var = (char *) switch_xml_attr_soft(param, "name");
+                        char *val = (char *) switch_xml_attr_soft(param, "value");
+
+                        if (!strcmp(var, "rotate-on-hup")) {
+                                globals.rotate = switch_true(val);
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: reload - rotate-on-hup = %s\n", val);
+                        } else if (!strcmp(var, "default-log-level")) {
+                                globals.default_log_level = switch_log_str2mask(val);
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: reload - default-log-level = %s\n", val);
+                        } else if (!strcmp(var, "default-rollover")) {
+                                globals.default_roll_size = switch_atoui(val);
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: reload - default-rollover = %s\n", val);
+                        } else if (!strcmp(var, "default-maximum-rotate")) {
+                                globals.default_max_rot = switch_atoui(val);
+                                if (globals.default_max_rot == 0) {
+                                        globals.default_max_rot = MAX_ROT;
+                                }
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: reload - default-maximum-rotate = %s\n", val);
+                        } else if (!strcmp(var, "uuid")) {
+                                globals.log_uuid = switch_true(val);
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: reload - uuid = %s\n", val);
+                        }
+                }
+        }
+        switch_xml_free(xml);
+
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, 
+                        "mod_logfile_domain: Configuration reloaded successfully\n");
+}
+
 SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_domain_load)
 {
         char *cf = "logfile_domain.conf";
@@ -740,8 +793,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_domain_load)
         switch_mutex_init(&globals.cache_mutex, SWITCH_MUTEX_NESTED, module_pool);
 
         /* Set default values */
-        globals.default_log_level = SWITCH_LOG_DEBUG | SWITCH_LOG_INFO | SWITCH_LOG_NOTICE | SWITCH_LOG_WARNING | SWITCH_LOG_ERROR | SWITCH_LOG_CRIT | SWITCH_LOG_ALERT;
-        globals.default_roll_size = 104857600; /* 100MB */
+        globals.default_log_level = SWITCH_LOG_DEBUG | SWITCH_LOG_INFO | SWITCH_LOG_NOTICE | SWITCH_LOG_WARNING | SWITCH_LOG_ERROR | SWITCH_LOG_CRIT | SWITCH_LOG_ALERT;        globals.default_roll_size = 104857600; /* 100MB */
         globals.default_max_rot = 32;
         globals.log_uuid = SWITCH_TRUE;
         globals.rotate = SWITCH_TRUE;
@@ -805,6 +857,12 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_domain_load)
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "mod_logfile_domain: Couldn't bind to CHANNEL_DESTROY event\n");
         }
 
+        /* Bind to RELOADXML event for configuration reload */
+        if (switch_event_bind_removable(modname, SWITCH_EVENT_RELOADXML, SWITCH_EVENT_SUBCLASS_ANY, 
+                                                                         reload_xml_event_handler, NULL, &globals.reload_xml_node) != SWITCH_STATUS_SUCCESS) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "mod_logfile_domain: Couldn't bind to RELOADXML event\n");
+        }
+
         /* Bind our logger */
         switch_log_bind_logger(mod_logfile_domain_logger, SWITCH_LOG_DEBUG, SWITCH_FALSE);
 
@@ -823,6 +881,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_logfile_domain_shutdown)
         switch_event_unbind(&globals.channel_create_node);
         switch_event_unbind(&globals.channel_answer_node);
         switch_event_unbind(&globals.channel_destroy_node);
+        switch_event_unbind(&globals.reload_xml_node);
 
         /* Close all open log files */
         if (domain_profile_hash) {
