@@ -38,6 +38,10 @@ Works alongside the standard module without conflicts.
 ### **1️⃣ Clone the Repository**
 ```bash
 git clone https://github.com/usamashabbir123/mod_logfile_domain.git
+Note: Adjust the FreeSWITCH source directory in install_mod_logfile_domain.sh according to your FreeSWITCH version.
+Example:
+FS_SRC="/usr/src/freeswitch-1.10.11"
+Change this if your FreeSWITCH source directory is different.
 
 Run the Installer Script
 
