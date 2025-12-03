@@ -33,6 +33,9 @@ Works alongside the standard module without conflicts.
 
 ---
 
+##  **Compatible**
+
+With FreeSWITCH 1.10.x
 ## 🛠️ **Installation Instructions**
 
 ### **1️⃣ Clone the Repository**

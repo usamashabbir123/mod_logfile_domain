@@ -22,7 +22,7 @@
  *
  * Contributor(s):
  *
- * Your Name <your@email.com>
+ * Your Name <usamashabir37@gmail.com>
  *
  *
  * mod_logfile_domain.c -- Domain-based Filesystem Logging

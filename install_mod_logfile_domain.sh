@@ -1,6 +1,9 @@
 #!/bin/bash
 # ------------------------------------------------------------
-#  Production Installer for mod_logfile_domain
+#  Installer for mod_logfile_domain module for FreeSWITCH
+#  Compatible with FreeSWITCH 1.10.x
+#  Author: Your Name <usamashabir37@gmail.com>
+#  Date: 03/12/2025
 # ------------------------------------------------------------
 
 set -e
