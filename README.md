@@ -44,22 +44,23 @@ mod_logfile_domain/
 
 ### 1️⃣ Clone the repository
 ```bash
+
 git clone https://github.com/usamashabbir123/mod_logfile_domain.git
-
-cp -r mod_logfile_domain /usr/src/freeswitch-1.10.11/src/mod/loggers/
-
-
-sudo cp mod_logfile_domain/conf/autoload_configs/logfile_domain.conf.xml \
-    /etc/freeswitch/autoload_configs/
+chmod +X install_mod_logfile_domain.sh
+sudo bash ./install_mod_logfile_domain.sh
+fs_cli -x "module_exists mod_logfile_domain
 
 
-cd /usr/src/freeswitch-1.10.11
-make mod_logfile_domain-clean
-make mod_logfile_domain
-make mod_logfile_domain-install
+In case of a non-tenant solution:
+The file name will be the IP address.
 
-sudo cp /usr/src/freeswitch-1.10.11/src/mod/loggers/mod_logfile_domain/.libs/mod_logfile_domain.so \
-    /usr/lib/freeswitch/mod/
+The following domain names are not allowed.
 
-systemctl restart freeswitch
-fs_cli -x "reload mod_logfile_domain"
+The module will skip creating log files for these domain names:
+invalid
+freeswitch
+example.com
+example.org
+test.
+.test
+default
