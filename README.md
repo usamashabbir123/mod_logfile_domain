@@ -1,66 +1,49 @@
-# **mod_logfile_domain**  
+# **mod_logfile_domain**
 ### *Per-Domain Logging Module for FreeSWITCH*
 
-`mod_logfile_domain` is an enhanced logging module for FreeSWITCH that creates **separate log files per SIP domain**, making multi-tenant debugging significantly easier.  
-It extends the default `mod_logfile` module by automatically generating and managing domain-specific log profiles.
+`mod_logfile_domain` is a custom FreeSWITCH module designed to generate **separate log files for each SIP domain**, making **multi-tenant debugging, tracing, and auditing significantly easier**.
+
+It extends the default `mod_logfile` behavior by intelligently creating and managing **domain-specific logging profiles** with minimal performance overhead.
 
 ---
 
 ## 🚀 **Features**
 
-- 📁 **Automatic log creation per domain**  
-  Logs stored under:
+- 📁 **Automatic Per-Domain Log File Creation**  
+  Each domain gets its own log file stored at:
+  
 /usr/local/freeswitch/log/<domain>.log
 
-
-- 🔎 **Accurate domain detection** using:
-- UUID metadata  
+- 🔎 **Accurate Domain Detection** using:
+- SIP UUID metadata  
 - SIP message headers  
-- Profile/domain mapping
+- Profile → Domain mapping  
 
-- ⚡ **Domain lookup cache** for high performance
+- ⚡ **Built-in Domain Lookup Cache**  
+Ensures high performance and reduced lookup overhead.
 
-- 🔄 **Log rotation support**
+- 🔄 **Supports Log Rotation**  
+Integrates smoothly with existing FreeSWITCH rotation systems.
 
-- 🧩 **Works alongside the default `mod_logfile` module**
+- 🧩 **Fully Compatible with Default `mod_logfile` Module**  
+Works alongside the standard module without conflicts.
 
 ---
 
-## 📂 **Directory Structure**
-
-mod_logfile_domain/
-│
-├── conf/
-│ └── autoload_configs/
-│ └── logfile_domain.conf.xml
-│
-├── mod_logfile_domain.c
-├── Makefile.am
-└── README.md
 
 ---
 
 ## 🛠️ **Installation Instructions**
 
-### 1️⃣ Clone the repository
+### **1️⃣ Clone the Repository**
 ```bash
-
 git clone https://github.com/usamashabbir123/mod_logfile_domain.git
-chmod +X install_mod_logfile_domain.sh
+
+Run the Installer Script
+
+chmod +x install_mod_logfile_domain.sh
 sudo bash ./install_mod_logfile_domain.sh
-fs_cli -x "module_exists mod_logfile_domain
+Verify Module Installation
+fs_cli -x "module_exists mod_logfile_domain"
 
 
-In case of a non-tenant solution:
-The file name will be the IP address.
-
-The following domain names are not allowed.
-
-The module will skip creating log files for these domain names:
-invalid
-freeswitch
-example.com
-example.org
-test.
-.test
-default
