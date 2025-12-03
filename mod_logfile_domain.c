@@ -80,6 +80,7 @@ static switch_status_t mod_logfile_domain_rotate(domain_logfile_profile_t *profi
 static switch_status_t mod_logfile_domain_raw_write(domain_logfile_profile_t *profile, char *log_data);
 static char* find_matching_cached_domain(const char *extracted_domain);
 static char* clean_domain_string(const char *domain);
+static switch_bool_t is_valid_domain(const char *domain);
 
 /* UUID to Domain cache functions */
 static void cache_uuid_domain(const char *uuid_str, const char *domain)
@@ -239,6 +240,127 @@ static char* clean_domain_string(const char *domain)
         return cleaned;
 }
 
+/* Validate if extracted string is actually a valid domain/IP */
+static switch_bool_t is_valid_domain(const char *domain)
+{
+        int len, i;
+        int dot_count = 0;
+        int digit_count = 0;
+        int alpha_count = 0;
+        switch_bool_t could_be_ip = SWITCH_FALSE;
+        
+        if (zstr(domain)) {
+                return SWITCH_FALSE;
+        }
+        
+        len = strlen(domain);
+        
+        /* Reject if too short or too long */
+        if (len < 3 || len > 255) {
+                return SWITCH_FALSE;
+        }
+        
+        /* Reject common invalid patterns */
+        if (strstr(domain, ".invalid") != NULL) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                "mod_logfile_domain: Rejecting invalid domain: %s\n", domain);
+                return SWITCH_FALSE;
+        }
+        
+        /* Reject if it looks like a random hash/UUID */
+        /* Random hashes typically have no dots and are all lowercase alphanumeric */
+        for (i = 0; i < len; i++) {
+                if (domain[i] == '.') {
+                        dot_count++;
+                } else if (isdigit(domain[i])) {
+                        digit_count++;
+                } else if (isalpha(domain[i])) {
+                        alpha_count++;
+                }
+        }
+        
+        /* If no dots and looks like random string (mix of letters/numbers) */
+        if (dot_count == 0 && alpha_count > 5 && digit_count > 0) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                "mod_logfile_domain: Rejecting hash-like string: %s\n", domain);
+                return SWITCH_FALSE;
+        }
+        
+        /* Check if it could be an IP address (IPv4) */
+        could_be_ip = (dot_count == 3 && digit_count > 0 && alpha_count == 0);
+        
+        /* Validate IP address format */
+        if (could_be_ip) {
+                char *temp = strdup(domain);
+                char *octets[4];
+                int argc, j;
+                int valid_ip = 1;
+                
+                argc = switch_split(temp, '.', octets);
+                
+                if (argc == 4) {
+                        for (j = 0; j < 4; j++) {
+                                int octet = atoi(octets[j]);
+                                if (octet < 0 || octet > 255 || strlen(octets[j]) == 0) {
+                                        valid_ip = 0;
+                                        break;
+                                }
+                                /* Check if it's actually all digits */
+                                char *p = octets[j];
+                                while (*p) {
+                                        if (!isdigit(*p)) {
+                                                valid_ip = 0;
+                                                break;
+                                        }
+                                        p++;
+                                }
+                        }
+                } else {
+                        valid_ip = 0;
+                }
+                
+                free(temp);
+                
+                if (valid_ip) {
+                        /* Reject invalid IP ranges */
+                        if (strcmp(domain, "0.0.0.0") == 0) {
+                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                                "mod_logfile_domain: Rejecting 0.0.0.0\n");
+                                return SWITCH_FALSE;
+                        }
+                        return SWITCH_TRUE;
+                }
+                return SWITCH_FALSE;
+        }
+        
+        /* For domain names, require at least one dot and valid TLD-like structure */
+        if (dot_count < 1) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                "mod_logfile_domain: Rejecting domain without dots: %s\n", domain);
+                return SWITCH_FALSE;
+        }
+        
+        /* Check for valid TLD (at least 2 characters after last dot) */
+        char *last_dot = strrchr(domain, '.');
+        if (last_dot) {
+                int tld_len = strlen(last_dot + 1);
+                if (tld_len < 2) {
+                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                        "mod_logfile_domain: Rejecting domain with invalid TLD: %s\n", domain);
+                        return SWITCH_FALSE;
+                }
+        }
+        
+        /* Reject localhost or local */
+        if (strcmp(domain, "localhost") == 0 || strcmp(domain, "local") == 0) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                "mod_logfile_domain: Rejecting localhost/local: %s\n", domain);
+                return SWITCH_FALSE;
+        }
+        
+        return SWITCH_TRUE;
+}
+
 /* Check extracted domain against currently active domain profiles for EXACT match */
 static char* find_matching_cached_domain(const char *extracted_domain)
 {
@@ -293,7 +415,7 @@ static char* find_matching_cached_domain(const char *extracted_domain)
         return found_domain;
 }
 
-/* Extract domain from log data - with improved cleaning */
+/* Extract domain from log data - with improved cleaning and validation */
 static char* extract_domain_from_logdata(const char *log_data)
 {
         char *temp = NULL;
@@ -326,10 +448,15 @@ static char* extract_domain_from_logdata(const char *log_data)
                 cleaned = clean_domain_string(temp);
                 free(temp);
                 
-                if (cleaned && strlen(cleaned) > 0) {
+                /* Validate before returning */
+                if (cleaned && strlen(cleaned) > 0 && is_valid_domain(cleaned)) {
                         return cleaned;
                 }
-                if (cleaned) free(cleaned);
+                if (cleaned) {
+                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                        "mod_logfile_domain: Extracted but invalid domain from context: %s\n", cleaned);
+                        free(cleaned);
+                }
         }
 
         /* Look for @domain pattern: "sofia/internal/1234@192.168.1.157" */
@@ -349,15 +476,22 @@ static char* extract_domain_from_logdata(const char *log_data)
                 if (end) *end = '\0';
                 end = strchr(at_pos, ',');
                 if (end) *end = '\0';
+                end = strchr(at_pos, ':');  /* Also stop at port separator */
+                if (end) *end = '\0';
 
                 /* Clean the extracted domain */
                 cleaned = clean_domain_string(at_pos);
                 free(temp);
                 
-                if (cleaned && strlen(cleaned) > 3) {
+                /* Validate before returning */
+                if (cleaned && strlen(cleaned) > 3 && is_valid_domain(cleaned)) {
                         return cleaned;
                 }
-                if (cleaned) free(cleaned);
+                if (cleaned) {
+                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+                                        "mod_logfile_domain: Extracted but invalid domain from @: %s\n", cleaned);
+                        free(cleaned);
+                }
         } else {
                 free(temp);
         }
