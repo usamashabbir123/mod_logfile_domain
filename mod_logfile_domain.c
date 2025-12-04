@@ -511,7 +511,7 @@ static char* extract_domain_from_logdata(const char *log_data)
 	return NULL;
 }
 
-static domain_logfile_profile_t* get_domain_profile(const char *domain)
+static domain_logfile_profile_t* get_domain_profile(const char *domain, switch_bool_t create_if_missing)
 {
 	domain_logfile_profile_t *profile = NULL;
 	char logfile_path[512];
@@ -525,7 +525,7 @@ static domain_logfile_profile_t* get_domain_profile(const char *domain)
 	/* Check if profile already exists */
 	profile = (domain_logfile_profile_t *)switch_core_hash_find(domain_profile_hash, domain);
 
-	if (!profile) {
+	if (!profile && create_if_missing) {
 		/* Create new domain profile */
 		profile = switch_core_alloc(module_pool, sizeof(*profile));
 		memset(profile, 0, sizeof(*profile));
@@ -741,10 +741,14 @@ static switch_status_t mod_logfile_domain_logger(const switch_log_node_t *node, 
 	char *matched_domain = NULL;
 	domain_logfile_profile_t *domain_profile = NULL;
 	size_t ok = 0;
+	switch_bool_t from_uuid = SWITCH_FALSE;
 
 	/* Try to get domain from UUID first */
 	if (!zstr(node->userdata)) {
 		domain = get_domain_from_uuid(node->userdata);
+		if (domain) {
+			from_uuid = SWITCH_TRUE;
+		}
 	}
 
 	/* Second try: Extract domain from log data if UUID lookup failed */
@@ -763,18 +767,22 @@ static switch_status_t mod_logfile_domain_logger(const switch_log_node_t *node, 
 				free(extracted_domain);
 				domain = matched_domain;
 			} else {
-				/* No exact match - use the cleaned extracted domain */
+				/* No exact match - IGNORE this extracted domain to prevent creating unwanted log files */
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
-						"mod_logfile_domain: Using new extracted domain '%s'\n", 
+						"mod_logfile_domain: Extracted domain '%s' not in cache, ignoring (likely invalid or post-session log)\n", 
 						extracted_domain);
-				domain = extracted_domain;
+				free(extracted_domain);
+				/* domain remains NULL, so log will be skipped */
 			}
 		}
 	}
 
 	/* If we found a domain, write to domain-specific log */
 	if (domain) {
-		domain_profile = get_domain_profile(domain);
+		/* Only create new profile if domain came from UUID (trusted source) */
+		/* If from extraction, only use if it already exists in cache */
+		domain_profile = get_domain_profile(domain, from_uuid);
+		
 		if (domain_profile) {
 			ok = switch_log_check_mask(domain_profile->all_level, level);
 			if (ok) {
@@ -794,6 +802,10 @@ static switch_status_t mod_logfile_domain_logger(const switch_log_node_t *node, 
 					mod_logfile_domain_raw_write(domain_profile, node->data);
 				}
 			}
+		} else if (from_uuid) {
+			/* This shouldn't happen if from_uuid is TRUE, but log it just in case */
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, 
+					"mod_logfile_domain: Failed to get/create profile for domain '%s' from UUID\n", domain);
 		}
 		free(domain);
 	}
